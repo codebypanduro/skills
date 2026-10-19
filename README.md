@@ -4,6 +4,15 @@ My personal collection of Claude Code skills.
 
 ## Install
 
+With the [skills CLI](https://skills.sh):
+
+```bash
+npx skills add codebypanduro/skills                     # pick skills interactively
+npx skills add codebypanduro/skills --skill explain-fix -g  # one skill, user-level
+```
+
+Or, from a clone, symlink them all:
+
 ```bash
 ./install.sh
 ```
