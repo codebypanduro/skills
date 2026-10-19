@@ -15,6 +15,7 @@ This symlinks every folder in `skills/` into `~/.claude/skills`, so edits here g
 | Skill | Invocation | What it does |
 | --- | --- | --- |
 | [`issue-brief`](skills/issue-brief/SKILL.md) | `/issue-brief [focus]` | Captures the current conversation as short issues to spec later, then optionally creates them with `gh`. |
+| [`explain-fix`](skills/explain-fix/SKILL.md) | `/explain-fix [#issue]` | After a fix, posts a short, jargon-free comment on the related GitHub issue: what was wrong, why, and how it was fixed. |
 
 ## Adding a skill
 
