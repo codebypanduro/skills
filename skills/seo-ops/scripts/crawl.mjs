@@ -18,8 +18,14 @@
 //                          --site is a preview. Sitemap locs, links and canonicals on them are mapped to --site.
 //   --out <file>           write JSON there; otherwise stdout
 //
+//   --similarity <0-1>     how alike two pages' structure must be to count as one template, default 0.6
+//
 // Output: { site, crawledAt, robots, llmsTxt, sitemap: {urls, sampled}, pages: [...], groups: {...}, issues: [...] }
-// Each issue: { check, severity, group, count, urls(sample) }. Groups are URL patterns, e.g. "/blog/*".
+// Groups are page templates, found by clustering pages on their HTML structure (tag+class tokens inside
+// <main>, minus header/nav/footer, plus JSON-LD types), so /fyn/ and /romantisk/ rendered by one template
+// form one group even though their URLs share no prefix. Each group: { pages, urlPatterns, examples,
+// sitemapUrlsEst, jsonLdTypes, avgWords }. Each issue: { check, severity, group, count, fanoutEst, urls(sample) };
+// fanoutEst extrapolates the crawled share to the whole sitemap.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -39,12 +45,13 @@ function parseArgs(argv) {
     else if (k === '--concurrency') a.concurrency = Number(v());
     else if (k === '--delay') a.delay = Number(v());
     else if (k === '--link-check') a.linkCheck = Number(v());
+    else if (k === '--similarity') a.similarity = Number(v());
     else if (k === '--alias') a.alias = v().split(',').map((s) => new URL(s.trim()).origin);
     else if (k === '--out') a.out = v();
     else { process.stderr.write(`crawl: unknown flag ${k}\n`); process.exit(4); }
   }
   if (!a.site) { process.stderr.write('crawl: --site is required\n'); process.exit(4); }
-  return { limit: 300, concurrency: 4, delay: 250, linkCheck: 150, ...a };
+  return { limit: 300, concurrency: 4, delay: 250, linkCheck: 150, similarity: 0.6, ...a };
 }
 
 // Origins treated as this site (see --alias); set in main().
@@ -127,10 +134,11 @@ async function readSitemap(url, seen = new Set(), depth = 0) {
 
 // ---------- grouping / sampling ----------
 
+/** URL pattern used for sampling and for naming templates: "/", "/*", "/blog/*", "/shop/:n/*". */
 function groupOf(path) {
   const segs = path.split('?')[0].split('/').filter(Boolean);
   if (!segs.length) return '/';
-  if (segs.length === 1) return `/${segs[0]}`;
+  if (segs.length === 1) return '/*';
   return `/${segs.slice(0, segs.length - 1).join('/')}/*`.replace(/\/\d+(?=\/)/g, '/:n');
 }
 
@@ -180,6 +188,84 @@ function jsonLdTypes(blocks) {
   return { types: [...types], invalid, ...fields };
 }
 
+/** Distinct tag+class tokens of the page's own content region: the template's fingerprint. */
+function structure(bodyHtml) {
+  let region = (bodyHtml.match(/<main\b[\s\S]*<\/main>/i) || [])[0];
+  if (!region) region = bodyHtml.replace(/<(header|footer|nav)\b[\s\S]*?<\/\1>/gi, ' ');
+  region = region.replace(/<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ');
+  const tokens = new Set();
+  for (const m of region.matchAll(/<([a-z][a-z0-9-]*)\b([^>]*)>/gi)) {
+    const cls = (m[2].match(/\bclass\s*=\s*("([^"]*)"|'([^']*)')/i) || [])[2] ?? '';
+    tokens.add(`${m[1].toLowerCase()}.${cls.split(/\s+/).filter(Boolean).sort().join('.')}`);
+  }
+  return tokens;
+}
+
+function jaccard(a, b) {
+  if (!a.size && !b.size) return 1;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+/** Cluster fetched pages into templates; sets p.group and returns the groups summary. */
+function clusterTemplates(pages, sitemapUrls, threshold) {
+  const clusters = [];
+  for (const p of pages) {
+    p.pattern = groupOf(new URL(p.url).pathname);
+    if (!p.html) continue;
+    const sig = new Set(p.html.skeleton);
+    let best = null; let bestScore = 0;
+    for (const c of clusters) {
+      const s = jaccard(sig, c.sig);
+      if (s > bestScore) { best = c; bestScore = s; }
+    }
+    if (best && bestScore >= threshold) best.members.push(p);
+    else clusters.push({ sig, members: [p] });
+  }
+
+  // One-off pages ("/", "/about/") are named by their path; templates by their URL pattern, or by the
+  // shared prefix ("/docs/**") when one template spans several patterns.
+  const oneOff = (c) => c.members.length === 1 && ['/', '/*'].includes(c.members[0].pattern);
+  const label = (c) => {
+    if (oneOff(c)) return new URL(c.members[0].url).pathname;
+    const pats = [...new Set(c.members.map((m) => m.pattern))].sort();
+    if (pats.length === 1) return pats[0] === '/*' ? '/:slug' : pats[0];
+    const segs = pats.map((x) => x.split('/').filter((t) => t && t !== '*'));
+    const common = [];
+    for (let i = 0; segs.every((sg) => sg[i] !== undefined && sg[i] === segs[0][i]); i++) common.push(segs[0][i]);
+    if (common.length) return `/${common.join('/')}/**`;
+    return pats.slice(0, 3).map((x) => (x === '/*' ? '/:slug' : x)).join(' + ') + (pats.length > 3 ? ' + …' : '');
+  };
+
+  const crawledByPattern = new Map();
+  for (const p of pages) if (p.html) crawledByPattern.set(p.pattern, (crawledByPattern.get(p.pattern) || 0) + 1);
+  const sitemapByPattern = new Map();
+  for (const u of sitemapUrls) { const k = groupOf(new URL(u).pathname); sitemapByPattern.set(k, (sitemapByPattern.get(k) || 0) + 1); }
+
+  const groups = {};
+  for (const c of clusters) {
+    let name = label(c);
+    for (let n = 2; groups[name]; n++) name = `${label(c)} #${n}`;
+    const byPattern = new Map();
+    for (const m of c.members) { m.group = name; byPattern.set(m.pattern, (byPattern.get(m.pattern) || 0) + 1); }
+    let est = 0;
+    for (const [pat, n] of byPattern) est += (n / crawledByPattern.get(pat)) * (sitemapByPattern.get(pat) || 0);
+    const types = new Set();
+    c.members.forEach((m) => m.html.jsonLd.types.forEach((t) => types.add(t)));
+    groups[name] = {
+      pages: c.members.length,
+      urlPatterns: [...byPattern.keys()],
+      examples: c.members.slice(0, 3).map((m) => new URL(m.url).pathname),
+      sitemapUrlsEst: oneOff(c) ? 1 : Math.max(c.members.length, Math.round(est)),
+      jsonLdTypes: [...types],
+      avgWords: Math.round(c.members.reduce((sum, m) => sum + m.html.words, 0) / c.members.length),
+    };
+  }
+  for (const p of pages) if (!p.html) p.group = `${p.pattern} (status ${p.status})`;
+  return groups;
+}
+
 function extract(html, pageUrl, origin) {
   const head = html.slice(0, 200000);
   const metas = [...head.matchAll(/<meta\b[^>]*>/gi)].map((m) => attrs(m[0]));
@@ -189,6 +275,7 @@ function extract(html, pageUrl, origin) {
   const h2s = [...html.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map((m) => decode(m[1].replace(/<[^>]+>/g, '')));
   const ld = jsonLdTypes([...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]));
   const bodyHtml = (html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i) || [, html])[1];
+  const skeleton = structure(bodyHtml);
   const text = decode(bodyHtml.replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' '));
   const imgs = [...bodyHtml.matchAll(/<img\b[^>]*>/gi)].map((m) => attrs(m[0]));
   const internal = new Set();
@@ -220,6 +307,7 @@ function extract(html, pageUrl, origin) {
     images: imgs.length,
     imagesNoAlt: imgs.filter((i) => i.alt === undefined).length,
     internalLinks: [...internal],
+    skeleton: [...skeleton, ...ld.types.map((t) => `ld:${t}`)],
     externalLinks: external,
   };
 }
@@ -302,7 +390,7 @@ async function main() {
       const isHtml = (r.headers?.get('content-type') || '').includes('html');
       pages.push({
         url, finalUrl: r.finalUrl, status: r.status, error: r.error, ms: r.ms,
-        chain: r.chain, group: groupOf(new URL(url).pathname), fromSitemap: fromSitemap.has(url),
+        chain: r.chain, fromSitemap: fromSitemap.has(url),
         xRobots: r.headers?.get('x-robots-tag') || null,
         cache: r.headers?.get('cache-control') || null,
         html: r.status === 200 && isHtml ? extract(r.body, r.finalUrl, origin) : null,
@@ -336,22 +424,18 @@ async function main() {
     }
   }));
 
+  const groups = clusterTemplates(pages, sitemapUrls, a.similarity);
   const issues = buildIssues(pages, origin);
+  for (const i of issues) {
+    const g = groups[i.group];
+    i.fanoutEst = g ? Math.max(i.count, Math.round((i.count / g.pages) * g.sitemapUrlsEst)) : i.count;
+  }
   if (broken.length) issues.unshift({ check: 'broken-internal-links', severity: 'high', group: '*', count: broken.length, urls: broken.slice(0, 20) });
   for (const [bot, v] of Object.entries(robots.bots || {})) {
     if (v.blockedRoot) issues.push({ check: 'bot-blocked', severity: /Googlebot|Bingbot/.test(bot) ? 'high' : 'medium', group: 'robots.txt', count: 1, urls: [bot] });
   }
 
-  const groups = {};
-  for (const p of pages) {
-    const g = (groups[p.group] ||= { pages: 0, sitemapUrls: 0, jsonLdTypes: new Set(), avgWords: 0 });
-    g.pages++;
-    if (p.html) { p.html.jsonLd.types.forEach((t) => g.jsonLdTypes.add(t)); g.avgWords += p.html.words; }
-  }
-  for (const u of sitemapUrls) { const g = groupOf(new URL(u).pathname); if (groups[g]) groups[g].sitemapUrls++; }
-  for (const g of Object.values(groups)) { g.avgWords = Math.round(g.avgWords / g.pages); g.jsonLdTypes = [...g.jsonLdTypes]; }
-
-  for (const p of pages) if (p.html) p.html.internalLinks = p.html.internalLinks.length;
+  for (const p of pages) if (p.html) { p.html.internalLinks = p.html.internalLinks.length; delete p.html.skeleton; }
 
   const out = {
     site: origin,
