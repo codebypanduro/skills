@@ -4,7 +4,7 @@ Two halves: whether our pages are easy for answer engines to extract and trust, 
 
 ## 1. Readiness
 
-Check the pages behind the prompt panel and the top 10 GSC pages (use the crawl output; fetch any missing page). Per page:
+Check the pages behind the prompt panel and the top 10 GSC pages (use the crawl output; fetch any missing page from the crawl target, i.e. `preview_url` when set). Citations in part 2 are always looked up for `domain`. Per page:
 
 - **Answer first.** The first 40–60 words under the H1, or under each question heading, answer the question directly. Intros that warm up before answering are the most common miss.
 - **Question-shaped headings** that match how people ask (`questionHeadings` in the crawl), with the answer in the paragraph straight after.

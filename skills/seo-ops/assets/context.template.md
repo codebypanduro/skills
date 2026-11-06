@@ -2,6 +2,7 @@
 # seo-ops project context. The YAML is machine-read every run; the notes below are for judgement.
 domain: example.com
 site_url: https://example.com
+preview_url:               # optional: staging/preview build to crawl until it is live on site_url
 market: DK                 # primary country (ISO 3166)
 language: da-DK            # content, SERP and prompt-panel language; reports stay English
 site_type: affiliate       # affiliate | saas | ecommerce | local | publisher | portfolio | other

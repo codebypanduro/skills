@@ -6,6 +6,7 @@
 
 1. **Infer before asking.** Fill every field you can from the environment:
    - `domain`/`site_url`: env files (`NEXT_PUBLIC_SITE_URL`, `APP_URL`, `SITE_URL`), framework config, `metadataBase`, sitemap/robots generators, `package.json` homepage.
+   - `preview_url`: when the live `site_url` doesn't serve this codebase yet (pre-launch, migration), find the staging build (repo homepage on GitHub, `vercel.json`/`netlify.toml` project, README) and set it after confirming it serves this build.
    - `stack.framework`, `stack.content.source`/`location`: dependencies (`next`, `astro`, `@sanity/client`, `laravel/framework`, WP theme files) and content folders (`content/`, `posts/`, `*.mdx`).
    - `stack.checks`: the lint/typecheck/test/build scripts that exist in `package.json`/`composer.json`.
    - `language`/`market`: `<html lang>` on the live homepage, i18n config, TLD.
