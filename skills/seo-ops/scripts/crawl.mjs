@@ -14,6 +14,8 @@
 //   --concurrency <n>      parallel requests, default 4
 //   --delay <ms>           pause between requests per worker, default 250
 //   --link-check <n>       max internal link targets outside the crawl set to status-check, default 150
+//   --alias <origins>      comma list of origins that mean this site, e.g. the production origin when
+//                          --site is a preview. Sitemap locs, links and canonicals on them are mapped to --site.
 //   --out <file>           write JSON there; otherwise stdout
 //
 // Output: { site, crawledAt, robots, llmsTxt, sitemap: {urls, sampled}, pages: [...], groups: {...}, issues: [...] }
@@ -37,11 +39,24 @@ function parseArgs(argv) {
     else if (k === '--concurrency') a.concurrency = Number(v());
     else if (k === '--delay') a.delay = Number(v());
     else if (k === '--link-check') a.linkCheck = Number(v());
+    else if (k === '--alias') a.alias = v().split(',').map((s) => new URL(s.trim()).origin);
     else if (k === '--out') a.out = v();
     else { process.stderr.write(`crawl: unknown flag ${k}\n`); process.exit(4); }
   }
   if (!a.site) { process.stderr.write('crawl: --site is required\n'); process.exit(4); }
   return { limit: 300, concurrency: 4, delay: 250, linkCheck: 150, ...a };
+}
+
+// Origins treated as this site (see --alias); set in main().
+let ORIGIN = '';
+let ALIASES = new Set();
+/** Map a URL on an alias origin to the crawl origin; other URLs pass through. */
+function toLocal(href, base) {
+  try {
+    const u = new URL(href, base);
+    if (ALIASES.has(u.origin)) return ORIGIN + u.pathname + u.search + u.hash;
+    return u.toString();
+  } catch { return href; }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,7 +116,7 @@ async function readSitemap(url, seen = new Set(), depth = 0) {
   seen.add(url);
   const res = await get(url);
   if (res.status !== 200) return [];
-  const locs = [...res.body.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]]+?)\s*(?:\]\]>)?\s*<\/loc>/gi)].map((m) => m[1].replace(/&amp;/g, '&'));
+  const locs = [...res.body.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]]+?)\s*(?:\]\]>)?\s*<\/loc>/gi)].map((m) => toLocal(m[1].replace(/&amp;/g, '&')));
   if (/<sitemapindex/i.test(res.body)) {
     const out = [];
     for (const loc of locs) out.push(...(await readSitemap(loc, seen, depth + 1)));
@@ -182,7 +197,7 @@ function extract(html, pageUrl, origin) {
     const href = m[2] ?? m[3];
     if (!href || /^(#|mailto:|tel:|javascript:)/i.test(href)) continue;
     try {
-      const u = new URL(href, pageUrl);
+      const u = new URL(toLocal(href, pageUrl));
       if (u.origin === origin) { u.hash = ''; internal.add(u.toString()); } else external++;
     } catch { /* ignore */ }
   }
@@ -234,7 +249,7 @@ function buildIssues(pages, origin) {
   add('description-length', 'low', ok.filter((p) => p.html.description && (p.html.description.length < 70 || p.html.description.length > 165)));
   add('h1-count-not-1', 'medium', ok.filter((p) => p.html.h1.length !== 1));
   add('missing-canonical', 'medium', ok.filter((p) => !p.html.canonical));
-  add('canonical-elsewhere', 'medium', ok.filter((p) => p.html.canonical && new URL(p.html.canonical, p.finalUrl).toString().replace(/\/$/, '') !== p.finalUrl.replace(/\/$/, '')));
+  add('canonical-elsewhere', 'medium', ok.filter((p) => p.html.canonical && toLocal(p.html.canonical, p.finalUrl).replace(/\/$/, '') !== p.finalUrl.replace(/\/$/, '')));
   add('missing-json-ld', 'medium', ok.filter((p) => !p.html.jsonLd.types.length));
   add('invalid-json-ld', 'high', ok.filter((p) => p.html.jsonLd.invalid));
   add('no-date-modified', 'low', ok.filter((p) => p.html.jsonLd.types.some((t) => /Article|BlogPosting|NewsArticle/.test(t)) && !p.html.jsonLd.dateModified));
@@ -258,6 +273,8 @@ function buildIssues(pages, origin) {
 async function main() {
   const a = parseArgs(process.argv.slice(2));
   const origin = new URL(a.site).origin;
+  ORIGIN = origin;
+  ALIASES = new Set((a.alias || []).filter((o) => o !== origin));
 
   const robotsRes = await get(`${origin}/robots.txt`);
   const robots = robotsRes.status === 200 ? parseRobots(robotsRes.body) : { sitemaps: [], bots: {}, missing: true };
@@ -268,7 +285,7 @@ async function main() {
   if (a.urls) {
     targets = a.urls.map((u) => new URL(u, origin).toString());
   } else {
-    const maps = a.sitemap ? [a.sitemap] : (robots.sitemaps.length ? robots.sitemaps : [`${origin}/sitemap.xml`]);
+    const maps = a.sitemap ? [a.sitemap] : (robots.sitemaps.length ? robots.sitemaps.map((m) => toLocal(m)) : [`${origin}/sitemap.xml`]);
     const seen = new Set();
     for (const m of maps) sitemapUrls.push(...(await readSitemap(m, seen)));
     sitemapUrls = [...new Set(sitemapUrls)];
@@ -338,6 +355,7 @@ async function main() {
 
   const out = {
     site: origin,
+    aliases: [...ALIASES],
     crawledAt: new Date().toISOString(),
     robots: { missing: !!robots.missing, sitemaps: robots.sitemaps, bots: robots.bots },
     llmsTxt: llms.status === 200,

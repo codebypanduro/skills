@@ -32,4 +32,6 @@ Use the host's web search tool with the query in the site language and market. O
 
 ## The live site and the codebase
 
+**Crawl target.** Crawl `preview_url` when it is set, with `--alias <site_url>` so the preview's sitemap, links and canonicals (which usually point at production) map back onto the preview. Everything about rankings and citations stays on `site_url`/`domain`: GSC, Ahrefs, SERP sampling, the prompt panel. Name the crawled origin in the report's Sources, and clear `preview_url` (ask, or list under **Needs you** when headless) once `site_url` serves the same build.
+
 The crawl (`scripts/crawl.mjs`) is always available. The codebase is available when the run is inside the project repo; without it, findings stay at URL/template level and `cause` is omitted.
