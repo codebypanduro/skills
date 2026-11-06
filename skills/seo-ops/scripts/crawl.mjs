@@ -164,9 +164,13 @@ function sample(urls, limit) {
 
 const decode = (s = '') => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
+/** Attributes of one tag, including bare ones (`<img alt>` → { alt: '' }). */
 function attrs(tag) {
   const o = {};
-  for (const m of tag.matchAll(/([a-zA-Z:-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g)) o[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? '';
+  const inner = tag.replace(/^<\/?[a-zA-Z][\w:-]*/, '').replace(/\/?>$/, '');
+  for (const m of inner.matchAll(/([^\s"'=<>\/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+    o[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
+  }
   return o;
 }
 
@@ -188,11 +192,18 @@ function jsonLdTypes(blocks) {
   return { types: [...types], invalid, ...fields };
 }
 
-/** Distinct tag+class tokens of the page's own content region: the template's fingerprint. */
-function structure(bodyHtml) {
+/** The page's own content: <main>, or the body without header/nav/footer. Scripts, styles and SVG removed. */
+function contentRegion(bodyHtml) {
   let region = (bodyHtml.match(/<main\b[\s\S]*<\/main>/i) || [])[0];
   if (!region) region = bodyHtml.replace(/<(header|footer|nav)\b[\s\S]*?<\/\1>/gi, ' ');
-  region = region.replace(/<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ');
+  return stripNonText(region);
+}
+
+const stripNonText = (html) => html.replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1>/gi, ' ');
+const textOf = (html) => decode(html.replace(/<[^>]+>/g, ' '));
+
+/** Distinct tag+class tokens of the page's own content region: the template's fingerprint. */
+function structure(region) {
   const tokens = new Set();
   for (const m of region.matchAll(/<([a-z][a-z0-9-]*)\b([^>]*)>/gi)) {
     const cls = (m[2].match(/\bclass\s*=\s*("([^"]*)"|'([^']*)')/i) || [])[2] ?? '';
@@ -266,7 +277,9 @@ function clusterTemplates(pages, sitemapUrls, threshold) {
   return groups;
 }
 
-function extract(html, pageUrl, origin) {
+function extract(rawHtml, pageUrl, origin) {
+  // Comments can hold markup and prose (`<!-- <dialog> instead of … -->`) that would leak into text and links.
+  const html = rawHtml.replace(/<!--[\s\S]*?-->/g, ' ');
   const head = html.slice(0, 200000);
   const metas = [...head.matchAll(/<meta\b[^>]*>/gi)].map((m) => attrs(m[0]));
   const links = [...head.matchAll(/<link\b[^>]*>/gi)].map((m) => attrs(m[0]));
@@ -275,8 +288,10 @@ function extract(html, pageUrl, origin) {
   const h2s = [...html.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)].map((m) => decode(m[1].replace(/<[^>]+>/g, '')));
   const ld = jsonLdTypes([...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]));
   const bodyHtml = (html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i) || [, html])[1];
-  const skeleton = structure(bodyHtml);
-  const text = decode(bodyHtml.replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' '));
+  const region = contentRegion(bodyHtml);
+  const skeleton = structure(region);
+  const text = textOf(region);
+  const allText = textOf(stripNonText(bodyHtml));
   const imgs = [...bodyHtml.matchAll(/<img\b[^>]*>/gi)].map((m) => attrs(m[0]));
   const internal = new Set();
   let external = 0;
@@ -302,10 +317,12 @@ function extract(html, pageUrl, origin) {
     tables: (bodyHtml.match(/<table\b/gi) || []).length,
     lists: (bodyHtml.match(/<(ul|ol)\b/gi) || []).length,
     jsonLd: ld,
-    words: text ? text.split(' ').length : 0,
+    words: text ? text.split(' ').length : 0, // main content only
+    wordsTotal: allText ? allText.split(' ').length : 0, // including header/nav/footer
     firstWords: text.split(' ').slice(0, 60).join(' '),
     images: imgs.length,
     imagesNoAlt: imgs.filter((i) => i.alt === undefined).length,
+    imagesEmptyAlt: imgs.filter((i) => i.alt === '').length, // decorative: valid, listed for review
     internalLinks: [...internal],
     skeleton: [...skeleton, ...ld.types.map((t) => `ld:${t}`)],
     externalLinks: external,
@@ -341,7 +358,7 @@ function buildIssues(pages, origin) {
   add('missing-json-ld', 'medium', ok.filter((p) => !p.html.jsonLd.types.length));
   add('invalid-json-ld', 'high', ok.filter((p) => p.html.jsonLd.invalid));
   add('no-date-modified', 'low', ok.filter((p) => p.html.jsonLd.types.some((t) => /Article|BlogPosting|NewsArticle/.test(t)) && !p.html.jsonLd.dateModified));
-  add('thin-content', 'medium', ok.filter((p) => p.html.words < 250));
+  add('thin-content', 'medium', ok.filter((p) => p.html.words < 250)); // main-content words
   add('images-missing-alt', 'low', ok.filter((p) => p.html.imagesNoAlt > 0));
   add('missing-lang', 'low', ok.filter((p) => !p.html.lang));
   add('missing-og-image', 'low', ok.filter((p) => !p.html.ogImage));
