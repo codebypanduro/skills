@@ -10,8 +10,8 @@ Depth `defects` (daily/weekly) crawls up to 60 sitemap URLs plus the top 10 GSC 
    node <skill-dir>/scripts/crawl.mjs --site <target> [--alias <site_url>] --urls <top GSC pages as paths> --out seo/.cache/crawl-<date>-top.json
    ```
    `<target>` is `preview_url` when set (with `--alias <site_url>`), else `site_url`; see `references/data.md`.
-   The output groups pages by URL pattern and pre-computes issue groups. Use `issues` as the starting list, then read `pages` for the checks below that the script cannot judge.
-2. **Map each issue group to its cause** (codebase available). Find the route/template that renders the group (Next.js `app/**/page.tsx` and `layout.tsx`, `generateMetadata`; Astro `src/pages`; Laravel Blade views; WP theme templates; the CMS field that feeds it). The finding's `cause` is a file:line, and the finding covers the whole group: one template fix, one item.
+   The output clusters pages into templates by their HTML structure (`groups`: `/:slug` for single-segment pages from one template, `/blog/*`, `/docs/**` when one template spans several prefixes, a path for one-off pages) and pre-computes issues per template. Use `issues` as the starting list, with `fanoutEst` as the finding's fan-out, then read `pages` for the checks below that the script cannot judge.
+2. **Map each issue group to its cause** (codebase available). Find the route/template that renders the group (its `examples` show which URLs) (Next.js `app/**/page.tsx` and `layout.tsx`, `generateMetadata`; Astro `src/pages`; Laravel Blade views; WP theme templates; the CMS field that feeds it). The finding's `cause` is a file:line, and the finding covers the whole group: one template fix, one item.
 3. **Check what the script cannot:**
    - **Rendering.** Main content present in the server HTML (`firstWords`, `words` in the crawl). Content that only appears after client JS is invisible to most AI crawlers and slows Google: high severity.
    - **Indexability policy.** Sitemap generator output vs routes that exist: indexable routes missing from the sitemap, and sitemap entries that should not be indexed (search, filters, thin tag pages).
