@@ -4,7 +4,7 @@
   "language": "da",
   "scenes": [
     { "caption": "En lille huskeliste", "say": "Det her er en lille huskeliste. Lad os tilføje en opgave.", "steps": [{ "wait": 300 }] },
-    { "caption": "Tilføj en opgave", "say": "Skriv opgaven, og tryk på tilføj.", "steps": [{ "type": ["#t", "Optag en gennemgang"] }, { "click": "button" }] },
+    { "caption": "Tilføj en opgave", "say": "Skriv opgaven, og tryk så på knappen for at lægge den på listen.", "steps": [{ "type": ["#t", "Optag en gennemgang"] }, { "click": "button" }] },
     { "caption": "Marker som færdig", "say": "Klik på opgaven for at markere den som færdig.", "steps": [{ "click": "li" }] }
   ]
 }

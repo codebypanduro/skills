@@ -50,7 +50,7 @@ export function assemble({ raw, scenes, outMp4, outSrt, burn, workDir }) {
   encode(['-crf', '23']);
   if (fs.statSync(outMp4).size > MAX_BYTES) {
     const dur = at;
-    const kbps = Math.floor((MAX_BYTES * 8) / dur / 1000 - 140);
+    const kbps = Math.max(150, Math.floor((MAX_BYTES * 8) / dur / 1000 - 140));
     encode(['-b:v', `${kbps}k`, '-maxrate', `${kbps}k`, '-bufsize', `${kbps * 2}k`]);
   }
   return { duration: at, bytes: fs.statSync(outMp4).size };

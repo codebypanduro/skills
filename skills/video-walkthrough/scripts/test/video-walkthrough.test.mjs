@@ -78,3 +78,11 @@ test('openai engine posts the documented speech request (fetch stubbed)', async 
     fs.rmSync(out);
   } finally { globalThis.fetch = real; }
 });
+
+test('parseToml handles single quotes and quotes inside trailing comments', () => {
+  assert.deepEqual(parseToml("voice = 'coral'\nengine = \"openai\" # the \"best\" one\n"), { voice: 'coral', engine: 'openai' });
+});
+
+test('relative first goto without url is rejected', () => {
+  assert.throws(() => normaliseScript({ scenes: [{ say: 'a', steps: [{ goto: '/x' }] }] }), /absolute/);
+});

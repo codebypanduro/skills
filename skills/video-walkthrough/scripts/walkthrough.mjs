@@ -19,7 +19,7 @@ async function main() {
   const config = loadConfig();
   const language = opts.lang || script.language || config.language || 'en';
   const fromArg = parseVoice(opts.voice);
-  const tts = resolveTts({
+  let tts = resolveTts({
     engine: fromArg.engine || config.engine || 'macos',
     // a per-call engine switch drops the config voice, which belongs to the config engine
     voice: fromArg.engine ? fromArg.voice : config.voice,
@@ -36,16 +36,28 @@ async function main() {
   const outDir = path.resolve(opts.out || 'walkthrough-out');
   fs.mkdirSync(outDir, { recursive: true });
 
-  const audio = [];
-  const holdFor = [];
-  for (const [i, s] of script.scenes.entries()) {
-    if (!s.say) { audio.push(null); holdFor.push(1.8); continue; }
-    const f = path.join(workDir, `scene${i}.${tts.ext}`);
-    await synthesize(tts, s.say, f);
-    const d = probeDuration(f);
-    audio.push(f);
-    holdFor.push(d + 0.7); // lead-in 0.3s + tail 0.4s: no dead air beyond a beat
+  try {
+  const narrate = async (voice) => {
+    const audio = [], holdFor = [];
+    for (const [i, s] of script.scenes.entries()) {
+      if (!s.say) { audio.push(null); holdFor.push(1.8); continue; }
+      const f = path.join(workDir, `scene${i}.${voice.ext}`);
+      await synthesize(voice, s.say, f);
+      audio.push(f);
+      holdFor.push(probeDuration(f) + 0.7); // lead-in 0.3s + tail 0.4s: no dead air beyond a beat
+    }
+    return { audio, holdFor };
+  };
+  let narration;
+  try {
+    narration = await narrate(tts);
+  } catch (e) {
+    if (tts.engine !== 'openai' || process.platform !== 'darwin') throw e;
+    log(`openai speech failed (${e.message}); falling back to macos voice for the whole video.`);
+    tts = resolveTts({ engine: 'macos', language });
+    narration = await narrate(tts);
   }
+  const { audio, holdFor } = narration;
 
   log('recording…');
   const { raw, timings } = await recordScenes({ script, holdFor, workDir });
@@ -60,13 +72,16 @@ async function main() {
     scenes: timings.map((t, i) => ({ ...t, audio: audio[i], caption: script.scenes[i].caption })),
     outMp4, outSrt, burn: opts.captions !== 'srt', workDir,
   });
-  const narration = path.join(outDir, `${stem}.narration.txt`);
-  fs.writeFileSync(narration, script.scenes.map((s, i) => `${i + 1}. ${s.say}`).join('\n') + '\n');
+  const narrationTxt = path.join(outDir, `${stem}.narration.txt`);
+  fs.writeFileSync(narrationTxt, script.scenes.map((s, i) => `${i + 1}. ${s.say}`).join('\n') + '\n');
 
-  const result = { mp4: outMp4, srt: outSrt, narration, seconds: +duration.toFixed(1), megabytes: +(bytes / 1048576).toFixed(2), engine: tts.engine, voice: tts.voice || null };
+  const result = { mp4: outMp4, srt: outSrt, narration: narrationTxt, seconds: +duration.toFixed(1), megabytes: +(bytes / 1048576).toFixed(2), engine: tts.engine, voice: tts.voice || null };
+  if (opts.pr && !/^\d+$/.test(opts.pr)) throw new Error(`pr must be a number, got "${opts.pr}"`);
   if (opts.pr) result.pr = uploadToPr({ prNumber: opts.pr, files: [outMp4, outSrt], dir: `walkthrough/${stem}` });
-  fs.rmSync(workDir, { recursive: true, force: true });
   console.log(JSON.stringify(result, null, 2));
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 main().catch((e) => { console.error(`[video-walkthrough] ${e.message}`); process.exit(1); });

@@ -13,6 +13,8 @@ const git = (args, opts = {}) => execFileSync('git', args, { encoding: 'utf8', s
 export function uploadToPr({ prNumber, files, dir }) {
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
   if (branch === 'HEAD') throw new Error('Detached HEAD: check out the PR branch first.');
+  const head = JSON.parse(execFileSync('gh', ['pr', 'view', String(prNumber), '--json', 'headRefName'], { encoding: 'utf8' })).headRefName;
+  if (head !== branch) throw new Error(`PR #${prNumber} is for branch "${head}", but you are on "${branch}".`);
   const assets = `pr-assets/${branch}`;
   const remote = 'origin';
   let parent = null;
@@ -21,7 +23,8 @@ export function uploadToPr({ prNumber, files, dir }) {
     parent = git(['rev-parse', `refs/remotes/${remote}/${assets}`]);
   } catch {}
 
-  const idx = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vw-idx-')), 'index');
+  const idxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vw-idx-'));
+  const idx = path.join(idxDir, 'index');
   const env = { ...process.env, GIT_INDEX_FILE: idx };
   if (parent) git(['read-tree', parent], { env });
   for (const f of files) {
@@ -29,13 +32,14 @@ export function uploadToPr({ prNumber, files, dir }) {
     git(['update-index', '--add', '--cacheinfo', `100644,${blob},${dir}/${path.basename(f)}`], { env });
   }
   const tree = git(['write-tree'], { env });
+  fs.rmSync(idxDir, { recursive: true, force: true });
   const commit = git(['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', `Walkthrough assets for PR #${prNumber}`]);
   git(['push', '--quiet', remote, `${commit}:refs/heads/${assets}`]);
 
   const repo = JSON.parse(execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner,url'], { encoding: 'utf8' }));
   const base = `${repo.url}/blob/${commit}/${dir}`;
-  const links = files.map((f) => `- [${path.basename(f)}](${base}/${path.basename(f)})`).join('\n');
+  const links = files.map((f) => `- [${path.basename(f)}](${base}/${path.basename(f)}?raw=true)`).join('\n');
   const body = `### Video walkthrough\n\n${links}\n\nStored on \`${assets}\` (not part of this branch); delete it after merge.`;
-  execFileSync('gh', ['pr', 'comment', String(prNumber), '--body', body], { stdio: ['ignore', 'inherit', 'inherit'] });
-  return { assets, commit, url: `${base}/${path.basename(files[0])}` };
+  const comment = execFileSync('gh', ['pr', 'comment', String(prNumber), '--body', body], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
+  return { assets, commit, comment, url: `${base}/${path.basename(files[0])}` };
 }

@@ -27,7 +27,11 @@ const engines = {
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`OpenAI speech API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      if (!res.ok) {
+        // OpenAI's error message can echo part of the key; report only status and error code.
+        const err = (await res.json().catch(() => ({}))).error || {};
+        throw new Error(`OpenAI speech API ${res.status}${err.code ? ` (${err.code})` : ''}`);
+      }
       fs.writeFileSync(outFile, Buffer.from(await res.arrayBuffer()));
     },
   },

@@ -42,13 +42,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function recordScenes({ script, holdFor, workDir }) {
   const { chromium } = await loadPlaywright();
   const browser = await chromium.launch();
-  const t0 = Date.now();
   const context = await browser.newContext({
     viewport: script.viewport,
     recordVideo: { dir: workDir, size: script.viewport },
   });
   await context.addInitScript(CURSOR_JS);
   const page = await context.newPage();
+  const t0 = Date.now(); // the video clock starts at page creation
   const now = () => (Date.now() - t0) / 1000;
   let mouse = { x: script.viewport.width / 2, y: script.viewport.height / 2 };
 
@@ -73,7 +73,7 @@ export async function recordScenes({ script, holdFor, workDir }) {
 
   const doStep = async (st) => {
     if ('goto' in st) {
-      await page.goto(new URL(st.goto, page.url() === 'about:blank' ? script.url : page.url()).href, { waitUntil: 'load' });
+      await page.goto(new URL(st.goto, page.url() === 'about:blank' ? script.url || undefined : page.url()).href, { waitUntil: 'load' });
       await page.mouse.move(mouse.x, mouse.y);
     } else if ('click' in st) { const l = await target(st.click); await sleep(150); await l.click(); }
     else if ('hover' in st) await target(st.hover);

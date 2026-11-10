@@ -61,7 +61,7 @@ Config (`~/.config/video-walkthrough/config.toml`): `engine`, `voice`, `model`, 
 
 **The narration text is sent to OpenAI when the openai engine is used.** Tell the user when narrating non-public material, and use `macos` or `piper` for anything confidential.
 
-An openai request with no key falls back to `macos` and says so in the run's output; relay that to the user.
+An openai request with no key, or one the API rejects (bad key, no credit), falls back to `macos` for the whole video and says so in the run output; relay that to the user.
 
 ## OpenAI key
 
@@ -75,7 +75,7 @@ A ChatGPT subscription does not include the API. The key comes from platform.ope
 
 Always in `out` (default `./walkthrough-out/`, keep it out of commits): `<name>.mp4` (H.264/AAC, at most 1080p, re-encoded under about 25 MB), `<name>.srt` (the captions), `<name>.narration.txt` (the spoken lines).
 
-`pr=<n>` commits the MP4 and `.srt` onto the `pr-assets/<current-branch>` branch with git plumbing (own temp index; working tree, index and feature branch untouched), pushes it, and comments the links on the PR via `gh`. Mention in your report that the `pr-assets/<branch>` branch can be deleted after merge. The video never goes into the feature branch.
+`pr=<n>` commits the MP4 and `.srt` onto the `pr-assets/<current-branch>` branch with git plumbing (own temp index; working tree, index and feature branch untouched), pushes it, and comments the links on the PR via `gh` (links, not an inline player). `<n>` must be the PR of the current branch. Mention in your report that the `pr-assets/<branch>` branch can be deleted after merge. The video never goes into the feature branch.
 
 For a herdr task's proof, attach the MP4 or link it in the proof artifact.
 

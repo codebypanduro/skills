@@ -17,7 +17,7 @@ export function normaliseScript(raw) {
     return { say: s.say || '', caption: s.caption || s.say || '', steps };
   });
   const first = scenes[0].steps[0];
-  if (!raw.url && !(first && first.goto)) throw new Error('Script needs a "url" or a first step with "goto".');
+  if (!raw.url && !/^[a-z]+:\/\//i.test(first?.goto || '')) throw new Error('Script needs a "url" or a first step with an absolute "goto".');
   return {
     title: raw.title || 'walkthrough',
     url: raw.url || null,

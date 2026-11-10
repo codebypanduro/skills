@@ -3,7 +3,7 @@
   "url": "file://SAMPLE_APP",
   "scenes": [
     { "caption": "A small todo app", "say": "This is a small todo app. Let's add a task.", "steps": [{ "wait": 300 }] },
-    { "caption": "Add a task", "say": "Type the task and press add.", "steps": [{ "type": ["#t", "Record a walkthrough"] }, { "click": "button" }] },
+    { "caption": "Add a task", "say": "Type the task, then press the add button to put it on the list.", "steps": [{ "type": ["#t", "Record a walkthrough"] }, { "click": "button" }] },
     { "caption": "Mark it done", "say": "Click a task to mark it as done.", "steps": [{ "click": "li" }] }
   ]
 }

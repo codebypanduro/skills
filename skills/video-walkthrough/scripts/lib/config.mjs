@@ -14,8 +14,9 @@ export function parseToml(text) {
     if (!m) continue;
     let v = m[2].trim();
     if (v.startsWith('"')) {
-      const end = v.lastIndexOf('"');
-      v = JSON.parse(v.slice(0, end + 1));
+      v = JSON.parse(v.match(/^"(?:[^"\\]|\\.)*"/)[0]);
+    } else if (v.startsWith("'")) {
+      v = v.match(/^'([^']*)'/)[1];
     } else {
       v = v.replace(/\s+#.*$/, '');
     }

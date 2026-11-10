@@ -16,6 +16,8 @@ if [ "${1:-}" = "status" ]; then
   have_key && echo "Keychain ($SERVICE): key stored" || echo "Keychain ($SERVICE): no key"
   [ -f "$HOME_DIR/config.toml" ] && echo "config: $HOME_DIR/config.toml" || echo "config: none (default engine: macos)"
   [ -d "$HOME_DIR/node_modules/playwright" ] && echo "playwright: installed" || echo "playwright: missing"
+  command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null && echo "ffmpeg: found" || echo "ffmpeg/ffprobe: MISSING (brew install ffmpeg)"
+  ffmpeg -hide_banner -filters 2>/dev/null | grep -q " subtitles " && echo "ffmpeg subtitles filter (captions): available" || echo "ffmpeg subtitles filter: MISSING (needs libass; use captions=srt)"
   exit 0
 fi
 
