@@ -30,7 +30,7 @@ const engines = {
       if (!res.ok) {
         // OpenAI's error message can echo part of the key; report only status and error code.
         const err = (await res.json().catch(() => ({}))).error || {};
-        throw new Error(`OpenAI speech API ${res.status}${err.code ? ` (${err.code})` : ''}`);
+        throw Object.assign(new Error(`OpenAI speech API ${res.status}${err.code ? ` (${err.code})` : ''}`), { openai: true });
       }
       fs.writeFileSync(outFile, Buffer.from(await res.arrayBuffer()));
     },
@@ -82,7 +82,12 @@ export function resolveTts({ engine = 'macos', voice, model, instructions, langu
 }
 
 export async function synthesize(tts, text, outFile) {
-  await engines[tts.engine].synth({ ...tts, key: tts.key, text, outFile });
+  try {
+    await engines[tts.engine].synth({ ...tts, key: tts.key, text, outFile });
+  } catch (e) {
+    if (tts.engine === 'openai') e.openai = true; // network errors too: the caller falls back to macos
+    throw e;
+  }
   return outFile;
 }
 

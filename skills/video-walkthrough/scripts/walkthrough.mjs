@@ -8,13 +8,14 @@ import { normaliseScript, slug } from './lib/script.mjs';
 import { resolveTts, synthesize, probeDuration } from './lib/tts.mjs';
 import { recordScenes } from './lib/record.mjs';
 import { assemble } from './lib/assemble.mjs';
-import { uploadToPr } from './lib/pr.mjs';
+import { checkPr, uploadToPr } from './lib/pr.mjs';
 
 const log = (m) => console.error(`[video-walkthrough] ${m}`);
 
 async function main() {
   const { script: scriptPath, opts } = parseArgs(process.argv.slice(2));
   if (!scriptPath) throw new Error('Usage: walkthrough.mjs <script.json> [voice=openai:nova|macos:Sara] [lang=da] [pr=<n>] [out=dir]');
+  if (opts.pr) checkPr(opts.pr);
   const script = normaliseScript(JSON.parse(fs.readFileSync(scriptPath, 'utf8')));
   const config = loadConfig();
   const language = opts.lang || script.language || config.language || 'en';
@@ -32,7 +33,7 @@ async function main() {
   if (tts.engine === 'openai') log('script text is sent to OpenAI for speech synthesis.');
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vw-'));
-  const stem = opts.name || slug(script.title);
+  const stem = slug(opts.name || script.title);
   const outDir = path.resolve(opts.out || 'walkthrough-out');
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -52,7 +53,7 @@ async function main() {
   try {
     narration = await narrate(tts);
   } catch (e) {
-    if (tts.engine !== 'openai' || process.platform !== 'darwin') throw e;
+    if (!e.openai || process.platform !== 'darwin') throw e;
     log(`openai speech failed (${e.message}); falling back to macos voice for the whole video.`);
     tts = resolveTts({ engine: 'macos', language });
     narration = await narrate(tts);
@@ -73,10 +74,9 @@ async function main() {
     outMp4, outSrt, burn: opts.captions !== 'srt', workDir,
   });
   const narrationTxt = path.join(outDir, `${stem}.narration.txt`);
-  fs.writeFileSync(narrationTxt, script.scenes.map((s, i) => `${i + 1}. ${s.say}`).join('\n') + '\n');
+  fs.writeFileSync(narrationTxt, script.scenes.map((s, i) => (s.say ? `${i + 1}. ${s.say}` : null)).filter(Boolean).join('\n') + '\n');
 
   const result = { mp4: outMp4, srt: outSrt, narration: narrationTxt, seconds: +duration.toFixed(1), megabytes: +(bytes / 1048576).toFixed(2), engine: tts.engine, voice: tts.voice || null };
-  if (opts.pr && !/^\d+$/.test(opts.pr)) throw new Error(`pr must be a number, got "${opts.pr}"`);
   if (opts.pr) result.pr = uploadToPr({ prNumber: opts.pr, files: [outMp4, outSrt], dir: `walkthrough/${stem}` });
   console.log(JSON.stringify(result, null, 2));
   } finally {

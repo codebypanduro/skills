@@ -86,3 +86,17 @@ test('parseToml handles single quotes and quotes inside trailing comments', () =
 test('relative first goto without url is rejected', () => {
   assert.throws(() => normaliseScript({ scenes: [{ say: 'a', steps: [{ goto: '/x' }] }] }), /absolute/);
 });
+
+test('a broken config line throws instead of being ignored', () => {
+  assert.throws(() => parseToml('engine = "openai'), /unclosed quote/);
+});
+
+test('openai HTTP failure carries only status and code, flagged as an openai error', async () => {
+  const { synthesize } = await import('../lib/tts.mjs');
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 'invalid_api_key', message: 'Incorrect API key provided: sk-sec****' } }), { status: 401 });
+  try {
+    const tts = resolveTts({ engine: 'openai' }, { getKey: () => 'sk-secret', platform: 'darwin' });
+    await assert.rejects(synthesize(tts, 'Hi', '/dev/null'), (e) => e.openai === true && e.message === 'OpenAI speech API 401 (invalid_api_key)');
+  } finally { globalThis.fetch = real; }
+});

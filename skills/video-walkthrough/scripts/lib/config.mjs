@@ -14,9 +14,13 @@ export function parseToml(text) {
     if (!m) continue;
     let v = m[2].trim();
     if (v.startsWith('"')) {
-      v = JSON.parse(v.match(/^"(?:[^"\\]|\\.)*"/)[0]);
+      const q = v.match(/^"(?:[^"\\]|\\.)*"/);
+      if (!q) throw new Error(`config: unclosed quote in: ${line}`);
+      v = JSON.parse(q[0]);
     } else if (v.startsWith("'")) {
-      v = v.match(/^'([^']*)'/)[1];
+      const q = v.match(/^'([^']*)'/);
+      if (!q) throw new Error(`config: unclosed quote in: ${line}`);
+      v = q[1];
     } else {
       v = v.replace(/\s+#.*$/, '');
     }
@@ -26,11 +30,14 @@ export function parseToml(text) {
 }
 
 export function loadConfig(dir = CONFIG_DIR) {
+  let text;
   try {
-    return parseToml(fs.readFileSync(path.join(dir, 'config.toml'), 'utf8'));
-  } catch {
-    return {};
+    text = fs.readFileSync(path.join(dir, 'config.toml'), 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return {};
+    throw e;
   }
+  return parseToml(text);
 }
 
 /** `key=value` words and one script path. Anything else is an error. */
