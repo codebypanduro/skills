@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Todo demo</title>
+<style>body{font:20px system-ui;margin:0;background:#f4f1ea;color:#222}main{max-width:620px;margin:70px auto}
+h1{margin:0 0 24px}form{display:flex;gap:10px}input{flex:1;padding:12px;font-size:20px;border:2px solid #222;border-radius:8px}
+button{padding:12px 20px;font-size:20px;border:0;border-radius:8px;background:#222;color:#fff;cursor:pointer}
+li{background:#fff;margin:10px 0;padding:14px;border-radius:8px;list-style:none;cursor:pointer}li.done{text-decoration:line-through;opacity:.5}ul{padding:0}</style>
+<main><h1>Todo</h1><form id="f"><input id="t" placeholder="What needs doing?"><button>Add</button></form><ul id="l"></ul></main>
+<script>f.onsubmit=e=>{e.preventDefault();if(!t.value)return;const li=document.createElement('li');li.textContent=t.value;li.onclick=()=>li.classList.toggle('done');l.append(li);t.value=''}</script>
