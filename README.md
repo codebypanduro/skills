@@ -26,6 +26,7 @@ This symlinks every folder in `skills/` into `~/.claude/skills`, so edits here g
 | [`issue-brief`](skills/issue-brief/SKILL.md) | `/issue-brief [focus]` | Captures the current conversation as short issues to spec later, then optionally creates them with `gh`. |
 | [`explain-fix`](skills/explain-fix/SKILL.md) | `/explain-fix [#issue]` | After a fix, posts a short, jargon-free comment on the related GitHub issue: what was wrong, why, and how it was fixed. |
 | [`seo-ops`](skills/seo-ops/SKILL.md) | `/seo-ops [mode] [--headless]` | SEO, GEO/AEO, competitor, content-gap and GSC/Ahrefs audits for any site, ending in a scored backlog. Drafts content, applies only approved items as PRs/CMS drafts, and runs headless on any agent's scheduler. |
+| [`brain-store`](skills/brain-store/SKILL.md) | `/brain-store [focus] [--brain <path>]` | Distills the current conversation into one entry and stores it in your second brain (any git, Obsidian or plain-folder vault), following the brain's own rules and committing only what it wrote. |
 
 ## Adding a skill
 
