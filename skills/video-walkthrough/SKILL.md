@@ -77,7 +77,7 @@ Always in `out` (default `./walkthrough-out/`, keep it out of commits): `<name>.
 
 `pr=<n>` commits the MP4 and `.srt` onto the `pr-assets/<current-branch>` branch with git plumbing (own temp index; working tree, index and feature branch untouched), pushes it, and comments the links on the PR via `gh` (links, not an inline player). `<n>` must be the PR of the current branch. Mention in your report that the `pr-assets/<branch>` branch can be deleted after merge. The video never goes into the feature branch.
 
-For a herdr task's proof, attach the MP4 or link it in the proof artifact.
+When a task needs visual proof that a change works, attach the MP4 or link it in the report.
 
 ## Tests
 
