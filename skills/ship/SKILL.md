@@ -28,16 +28,5 @@ Ship the current changes: create a branch, commit, push, and open a pull request
 6. **Push with upstream tracking.** `git push -u origin <branch-name>`.
 7. **Open the pull request.**
    - Run `gh pr create --base <base>` and always pass `--base` explicitly. Target the default branch unless the user said otherwise in this conversation. `gh`'s own default (often the current upstream) is not acceptable: it can land the PR in a stacked branch that never reaches the default branch.
-   - Title: short (under 70 characters), in the repo's commit style.
-   - Body via HEREDOC:
-
-     ```
-     ## Summary
-     <1-3 bullets describing the changes>
-
-     ## Test plan
-     <bulleted checklist of testing steps>
-     ```
-
-     End the body with the PR attribution line the harness provides, if any.
+   - Write the title and body with the `pr` skill. Pass the body via HEREDOC and end it with the PR attribution line the harness provides, if any.
 8. **Report back.** Show the user the PR URL.
