@@ -29,6 +29,7 @@ This symlinks every folder in `skills/` into `~/.claude/skills`, so edits here g
 | [`video-walkthrough`](skills/video-walkthrough/SKILL.md) | `/video-walkthrough [what to show] [voice=openai:nova] [lang=da] [pr=<n>]` | Records a short narrated MP4 of a feature in the browser (Playwright, visible cursor, captions, OpenAI/macOS/Piper voice-over via ffmpeg), plus an `.srt`, optionally attached to a PR. |
 | [`ship`](skills/ship/SKILL.md) | `/ship [branch hint]` | Ships current changes: branches from the fresh default branch, commits in the repo's own style, pushes, and opens a PR against the default branch. Only runs when typed. |
 | [`brainstorm`](skills/brainstorm/SKILL.md) | `/brainstorm <idea>` | Brainstorms from a single sentence: each turn pushes back on the strongest direction, asks sharp questions and adds safe/stretch/wild ideas, then wraps up with liked directions, parked ideas and riskiest assumptions. |
+| [`to-deck`](skills/to-deck/SKILL.md) | `/to-deck [issue or plan]` | Turns an agreed plan, issue, spec or grilling outcome into a Slides artifact that walks it A to Z as a journey, then lists the gaps and contradictions it found in the sources. |
 | [`pr`](skills/pr/SKILL.md) | `/pr` | Writes a short PR title and description: a Risk line and Heads-up callout up top, 3–5 bullets of what changed, what was verified, long output folded away. |
 
 ## Adding a skill
