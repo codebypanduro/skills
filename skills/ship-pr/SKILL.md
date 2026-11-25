@@ -1,5 +1,5 @@
 ---
-name: ship
+name: ship-pr
 description: Ship current changes as a new branch, commit, push and pull request against the default branch.
 argument-hint: "[branch hint]"
 disable-model-invocation: true
